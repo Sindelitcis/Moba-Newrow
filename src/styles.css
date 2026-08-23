@@ -1,0 +1,805 @@
+/**
+ * Stacking order, defined once.
+ *
+ * Three layers, bottom to top: the canvas, then world-space overlays that track
+ * things in the scene (health bars, damage numbers, ground rings, the minimap),
+ * then flat UI. The screens that must stay readable (the victory panel, the
+ * respawn timer, the menu) sit above the HUD chrome.
+ *
+ * The world overlay lives outside `.game-root` (see src/game/overlay.ts) and
+ * was once the only positioned element with a z-index, so it painted over every
+ * HUD panel.
+ *
+ * Load-bearing detail: `.game-root` must not create a stacking context, or the
+ * HUD layers below get trapped underneath the overlay again. Adding a
+ * `z-index`, `transform`, `filter` or `opacity` to it would do exactly that.
+ */
+:root {
+  --layer-world-overlay: 10;
+  --layer-hud: 20;
+  --layer-screen: 30;
+
+  /* One palette, shared by the HUD and (in their numeric form, see
+     src/game/unit-visuals.ts) by the renderer. */
+  --team-a: #4ecdc4;
+  --team-b: #ff8a65;
+  --accent: #4ecdc4;
+  --danger: #ff6b6b;
+  --warn: #ffa500;
+  --ink: #e0e6f0;
+  --ink-dim: rgba(224, 230, 240, 0.62);
+  --panel: rgba(6, 9, 20, 0.55);
+  --panel-solid: rgba(6, 9, 20, 0.92);
+  --edge: rgba(255, 255, 255, 0.14);
+}
+
+html, body {
+  margin: 0;
+  width: 100%;
+  height: 100%;
+  overflow: hidden;
+  background: #0c1020;
+  color: var(--ink);
+  font-family: -apple-system, BlinkMacSystemFont, "Segoe UI", "Roboto", "Oxygen",
+    "Ubuntu", "Cantarell", "Fira Sans", "Droid Sans", "Helvetica Neue",
+    sans-serif;
+  -webkit-font-smoothing: antialiased;
+  -moz-osx-font-smoothing: grayscale;
+  overscroll-behavior: none;
+}
+
+.game-root {
+  position: relative;
+  width: 100vw;
+  height: 100vh;
+  user-select: none;
+}
+
+#gameCanvas {
+  display: block;
+  width: 100%;
+  height: 100%;
+}
+
+.team-0 { color: var(--team-a); }
+.team-1 { color: var(--team-b); }
+
+/* ---------- Start menu -------------------------------------------------- */
+/* Covers the canvas until a mode is picked: the game client isn't even
+   started before that (see src/Game.tsx). */
+
+.menu {
+  position: absolute;
+  z-index: var(--layer-screen);
+  inset: 0;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  background: radial-gradient(circle at 50% 40%, rgba(78, 205, 196, 0.10), rgba(12, 16, 32, 0.96));
+}
+
+.menu-card {
+  width: min(440px, 88vw);
+  padding: 32px 28px;
+  background: rgba(0, 0, 0, 0.55);
+  border: 1px solid rgba(78, 205, 196, 0.35);
+  border-radius: 14px;
+  text-align: center;
+}
+
+.menu-title {
+  margin: 0;
+  font-size: 34px;
+  letter-spacing: 0.04em;
+  color: var(--accent);
+}
+
+.menu-sub {
+  margin: 6px 0 24px;
+  font-size: 13px;
+  color: var(--ink-dim);
+}
+
+.menu-button {
+  display: block;
+  width: 100%;
+  margin-bottom: 12px;
+  padding: 14px 16px;
+  background: rgba(255, 255, 255, 0.06);
+  border: 1px solid rgba(255, 255, 255, 0.18);
+  border-radius: 10px;
+  color: var(--ink);
+  font: inherit;
+  font-size: 16px;
+  font-weight: bold;
+  cursor: pointer;
+  transition: background 0.12s ease-out, border-color 0.12s ease-out;
+}
+
+.menu-button:hover:not(:disabled) {
+  background: rgba(255, 255, 255, 0.12);
+  border-color: rgba(255, 255, 255, 0.35);
+}
+
+.menu-button.primary {
+  background: rgba(78, 205, 196, 0.16);
+  border-color: rgba(78, 205, 196, 0.6);
+  color: var(--accent);
+}
+
+.menu-button.primary:hover:not(:disabled) {
+  background: rgba(78, 205, 196, 0.26);
+}
+
+.menu-button:disabled {
+  opacity: 0.45;
+  cursor: default;
+}
+
+.menu-hint {
+  display: block;
+  margin-top: 3px;
+  font-size: 11px;
+  font-weight: normal;
+  color: var(--ink-dim);
+}
+
+/* Heading over the match-size row, so three bare "1v1 / 2v2 / 3v3" buttons
+   read as sizes of the same thing rather than as three separate modes. */
+.menu-label {
+  margin-bottom: 8px;
+  font-size: 11px;
+  font-weight: bold;
+  letter-spacing: 0.08em;
+  text-transform: uppercase;
+  color: var(--ink-dim);
+}
+
+.menu-sizes {
+  display: flex;
+  gap: 8px;
+}
+
+/* Side by side rather than stacked: they are one choice, and three full-width
+   buttons would push PvP off the card. */
+.menu-sizes .menu-button.size {
+  flex: 1;
+  padding: 12px 8px;
+  text-align: center;
+}
+
+/* The three rules a new player has to know before the first wave arrives. */
+.menu-rules {
+  margin-top: 18px;
+  padding: 12px 14px;
+  background: rgba(255, 255, 255, 0.04);
+  border: 1px solid var(--edge);
+  border-radius: 8px;
+  font-size: 12px;
+  line-height: 1.55;
+  text-align: left;
+  color: var(--ink-dim);
+}
+
+.menu-rules b { color: var(--accent); }
+
+.menu-controls {
+  margin-top: 16px;
+  font-size: 12px;
+  color: var(--ink-dim);
+}
+
+.menu-controls b { color: rgba(224, 230, 240, 0.85); }
+
+.menu-loading {
+  margin-top: 10px;
+  font-size: 12px;
+  color: var(--warn);
+}
+
+/* ---------- Top-left status panel --------------------------------------- */
+
+.hud {
+  position: absolute;
+  z-index: var(--layer-hud);
+  top: 12px;
+  left: 12px;
+  padding: 10px 14px;
+  background: var(--panel);
+  border: 1px solid rgba(78, 205, 196, 0.3);
+  border-radius: 8px;
+  font-size: 13px;
+  line-height: 1.5;
+  pointer-events: none;
+  user-select: none;
+}
+
+.hud-title b { color: var(--accent); }
+
+.hud-line {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  margin-top: 4px;
+}
+
+.hud-ping {
+  font-size: 11px;
+  color: var(--ink-dim);
+}
+
+.status {
+  display: inline-block;
+  padding: 2px 8px;
+  border-radius: 4px;
+  font-weight: bold;
+  font-size: 11px;
+  text-transform: uppercase;
+  letter-spacing: 0.04em;
+}
+
+.status.connecting,
+.status.reconnecting {
+  background: var(--warn);
+  color: #000;
+}
+
+.status.connected {
+  background: var(--accent);
+  color: #000;
+}
+
+.status.disconnected {
+  background: var(--danger);
+  color: #fff;
+}
+
+.muted-tag {
+  padding: 2px 6px;
+  border-radius: 4px;
+  background: rgba(255, 255, 255, 0.12);
+  font-size: 11px;
+}
+
+.hud-actions {
+  display: flex;
+  gap: 6px;
+  margin-top: 8px;
+}
+
+.hud-button {
+  padding: 4px 10px;
+  background: rgba(255, 255, 255, 0.08);
+  border: 1px solid rgba(255, 255, 255, 0.2);
+  border-radius: 5px;
+  color: rgba(224, 230, 240, 0.85);
+  font: inherit;
+  font-size: 11px;
+  cursor: pointer;
+  pointer-events: auto;
+}
+
+.hud-button:hover {
+  background: rgba(255, 255, 255, 0.16);
+}
+
+/* Second click confirms: moving the cursor away cancels. */
+.hud-button.danger {
+  background: rgba(255, 107, 107, 0.22);
+  border-color: rgba(255, 107, 107, 0.7);
+  color: #ff8a8a;
+}
+
+/* ---------- Top-center scoreboard + match clock ------------------------- */
+
+.topbar {
+  position: absolute;
+  z-index: var(--layer-hud);
+  top: 10px;
+  left: 50%;
+  transform: translateX(-50%);
+  display: grid;
+  grid-template-columns: 3ch auto 3ch;
+  align-items: center;
+  justify-items: center;
+  column-gap: 16px;
+  padding: 6px 20px 8px;
+  background: var(--panel);
+  border: 1px solid var(--edge);
+  border-radius: 8px;
+  text-align: center;
+  pointer-events: none;
+  user-select: none;
+}
+
+.score-team {
+  font-size: 24px;
+  font-weight: bold;
+  font-variant-numeric: tabular-nums;
+}
+
+.topbar-clock {
+  font-size: 15px;
+  font-weight: bold;
+  font-variant-numeric: tabular-nums;
+  letter-spacing: 0.06em;
+  color: rgba(224, 230, 240, 0.9);
+}
+
+.topbar-sub {
+  grid-column: 1 / -1;
+  margin-top: 1px;
+  font-size: 11px;
+  color: var(--ink-dim);
+}
+
+/* ---------- Kill feed --------------------------------------------------- */
+
+.feed {
+  position: absolute;
+  z-index: var(--layer-hud);
+  top: 12px;
+  right: 12px;
+  display: flex;
+  flex-direction: column;
+  align-items: flex-end;
+  gap: 4px;
+  pointer-events: none;
+  user-select: none;
+}
+
+.feed-line {
+  padding: 4px 10px;
+  background: var(--panel);
+  border-left: 3px solid currentColor;
+  border-radius: 4px;
+  font-size: 12px;
+  animation: feed-in 0.18s ease-out;
+}
+
+/* The two events that change what you should be doing right now get to shout. */
+.feed-line.firstBlood,
+.feed-line.nexusExposed {
+  font-weight: bold;
+  background: rgba(6, 9, 20, 0.82);
+}
+
+@keyframes feed-in {
+  from { opacity: 0; transform: translateX(12px); }
+  to { opacity: 1; transform: none; }
+}
+
+/* ---------- Center screens ---------------------------------------------- */
+
+.match-over {
+  position: absolute;
+  z-index: var(--layer-screen);
+  top: 50%;
+  left: 50%;
+  transform: translate(-50%, -50%);
+  padding: 24px 44px;
+  /* Nearly opaque, plus a blur: these panels sit over a lane full of moving
+     units, and a translucent one is genuinely hard to read. */
+  background: var(--panel-solid);
+  backdrop-filter: blur(4px);
+  border: 1px solid rgba(78, 205, 196, 0.5);
+  border-radius: 10px;
+  box-shadow: 0 12px 40px rgba(0, 0, 0, 0.6);
+  text-align: center;
+}
+
+.match-over-title {
+  font-size: 28px;
+  font-weight: bold;
+}
+
+.match-over-score {
+  margin-top: 10px;
+  font-size: 34px;
+  font-weight: bold;
+}
+
+.match-over-dash {
+  margin: 0 14px;
+  color: rgba(224, 230, 240, 0.5);
+}
+
+.match-over-self {
+  margin-top: 6px;
+  font-size: 13px;
+  color: rgba(224, 230, 240, 0.75);
+}
+
+.match-over-next {
+  margin-top: 14px;
+  font-size: 13px;
+  color: var(--accent);
+}
+
+.reconnect-overlay {
+  position: absolute;
+  z-index: var(--layer-screen);
+  top: 50%;
+  right: 24px;
+  padding: 10px 16px;
+  background: rgba(0, 0, 0, 0.7);
+  border: 1px solid rgba(255, 165, 0, 0.6);
+  border-radius: 8px;
+  font-size: 14px;
+  font-weight: bold;
+  color: var(--warn);
+  pointer-events: none;
+  user-select: none;
+}
+
+.respawn-overlay {
+  position: absolute;
+  z-index: var(--layer-screen);
+  top: 46%;
+  left: 50%;
+  transform: translate(-50%, -50%);
+  padding: 16px 32px;
+  background: var(--panel-solid);
+  backdrop-filter: blur(4px);
+  border: 1px solid rgba(255, 107, 107, 0.5);
+  border-radius: 10px;
+  font-size: 18px;
+  font-weight: bold;
+  text-align: center;
+  color: var(--danger);
+  pointer-events: none;
+  user-select: none;
+}
+
+.respawn-title {
+  margin-bottom: 4px;
+  font-size: 13px;
+  letter-spacing: 0.14em;
+  text-transform: uppercase;
+  color: rgba(255, 107, 107, 0.75);
+}
+
+/* ---------- Bottom HUD: own health + hotbar ----------------------------- */
+
+.bottom-hud {
+  position: absolute;
+  z-index: var(--layer-hud);
+  bottom: 18px;
+  left: 50%;
+  transform: translateX(-50%);
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  gap: 8px;
+  pointer-events: none;
+  user-select: none;
+}
+
+/* Your own health, spelled out. The floating bar over your champion's head is
+   readable enough to notice, but not to make a stay-or-run decision on. */
+.self-bar {
+  position: relative;
+  width: 240px;
+  height: 20px;
+  background: rgba(0, 0, 0, 0.62);
+  border: 1px solid var(--edge);
+  border-radius: 4px;
+  overflow: hidden;
+}
+
+.self-bar-fill {
+  height: 100%;
+  transition: width 0.12s ease-out, background 0.2s linear;
+}
+
+.self-bar-fill.team-0 { background: linear-gradient(90deg, #3a6fd8, #4ecdc4); }
+.self-bar-fill.team-1 { background: linear-gradient(90deg, #d83a3a, #ff8a65); }
+.self-bar-fill.critical { background: linear-gradient(90deg, #8b1d1d, #ff4d4d); }
+
+.self-bar-text {
+  position: absolute;
+  inset: 0;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  font-size: 12px;
+  font-weight: bold;
+  font-variant-numeric: tabular-nums;
+  text-shadow: 0 1px 2px rgba(0, 0, 0, 0.9);
+}
+
+.hotbar {
+  display: flex;
+  gap: 10px;
+}
+
+.hotbar-slot {
+  position: relative;
+  width: 56px;
+  height: 56px;
+  background: rgba(0, 0, 0, 0.55);
+  border: 2px solid rgba(78, 205, 196, 0.5);
+  border-radius: 8px;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  overflow: hidden;
+  transition: border-color 0.15s ease-out, box-shadow 0.15s ease-out;
+}
+
+/* Off cooldown gets a glow, so "can I press this" is answerable peripherally. */
+.hotbar-slot.ready {
+  border-color: rgba(78, 205, 196, 0.9);
+  box-shadow: 0 0 10px rgba(78, 205, 196, 0.3);
+}
+
+/* The potion is the one slot that heals rather than hurts, so it reads green
+   even while the other two are teal. */
+.hotbar-slot.potion { border-color: rgba(110, 220, 130, 0.5); }
+
+.hotbar-slot.potion.ready {
+  border-color: rgba(110, 220, 130, 0.95);
+  box-shadow: 0 0 10px rgba(110, 220, 130, 0.35);
+}
+
+/* Movement rather than damage or healing, so it gets its own colour again. */
+.hotbar-slot.dash { border-color: rgba(180, 160, 255, 0.5); }
+
+.hotbar-slot.dash.ready {
+  border-color: rgba(180, 160, 255, 0.95);
+  box-shadow: 0 0 10px rgba(180, 160, 255, 0.35);
+}
+
+/* The dash icon is a glyph, not an emoji, so it needs the weight to match. */
+.hotbar-slot.dash .hotbar-icon {
+  font-size: 30px;
+  font-weight: bold;
+  line-height: 1;
+  color: #cdbcff;
+}
+
+.hotbar-slot.cooling {
+  border-color: rgba(255, 255, 255, 0.22);
+}
+
+.hotbar-icon {
+  font-size: 24px;
+  filter: drop-shadow(0 1px 2px rgba(0, 0, 0, 0.6));
+}
+
+.hotbar-cd-overlay {
+  position: absolute;
+  left: 0;
+  right: 0;
+  bottom: 0;
+  background: rgba(0, 0, 0, 0.68);
+  transition: height 0.05s linear;
+}
+
+.hotbar-cd-text {
+  position: absolute;
+  inset: 0;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  font-size: 16px;
+  font-weight: bold;
+  font-variant-numeric: tabular-nums;
+  color: #fff;
+  text-shadow: 0 1px 3px rgba(0, 0, 0, 0.9);
+}
+
+/* Centred across the slot rather than tucked into a corner, because the attack
+   slot names two bindings and would not fit beside the icon. */
+.hotbar-key {
+  position: absolute;
+  bottom: 2px;
+  left: 0;
+  right: 0;
+  text-align: center;
+  /* 8px, not 9: the attack slot names two bindings and 9px clips inside a
+     56px slot. These are hints, not labels, so the drop costs nothing. */
+  font-size: 8px;
+  line-height: 1;
+  white-space: nowrap;
+  color: rgba(255, 255, 255, 0.75);
+}
+
+/* ---------- World-space overlays ---------------------------------------- */
+/* Everything drawn over the canvas from plain DOM/SVG (HP bars, damage
+   numbers, the range ring, the minimap), positioned every tick via manual
+   world->screen projection: see src/game/overlay.ts for why these live
+   outside the Newstack tree. */
+
+.game-overlay {
+  position: fixed;
+  inset: 0;
+  overflow: hidden;
+  pointer-events: none;
+  z-index: var(--layer-world-overlay);
+}
+
+/* Floating damage numbers, shown only for hits you landed: the server tells
+   this client about its own hits and nobody else's (see
+   src/game/hit-markers.ts). */
+.hit-marker {
+  position: absolute;
+  left: 0;
+  top: 0;
+  font-size: 17px;
+  font-weight: bold;
+  color: #ffd76a;
+  text-shadow: 0 0 4px rgba(0, 0, 0, 0.9), 0 1px 2px rgba(0, 0, 0, 0.9);
+  pointer-events: none;
+  white-space: nowrap;
+}
+
+/* A killing blow reads differently at a glance. */
+.hit-marker.lethal {
+  font-size: 22px;
+  color: var(--danger);
+}
+
+/* Circles painted on the ground: your attack range, and the reach of any enemy
+   tower you are standing inside. See src/game/ground-rings.ts. */
+.ground-rings {
+  position: absolute;
+  inset: 0;
+  width: 100%;
+  height: 100%;
+  overflow: visible;
+}
+
+.ground-ring.attack {
+  fill: rgba(78, 205, 196, 0.06);
+  stroke: rgba(78, 205, 196, 0.45);
+  stroke-width: 1.5;
+}
+
+/* Brightens the moment the cursor is over an enemy that is actually in range,
+   which is the rule the ring exists to teach. */
+.ground-ring.attack-ready {
+  fill: rgba(255, 200, 80, 0.12);
+  stroke: rgba(255, 200, 80, 0.9);
+  stroke-width: 2.5;
+}
+
+/* Only ever on screen while you are inside it, so it can afford to be loud:
+   its appearing at all is the warning. Dashed and pulsing so it never reads as
+   part of the arena's own geometry. */
+.ground-ring.tower-danger {
+  fill: rgba(255, 70, 70, 0.09);
+  stroke: rgba(255, 90, 90, 0.85);
+  stroke-width: 2;
+  stroke-dasharray: 7 5;
+  animation: ring-pulse 1.1s ease-in-out infinite;
+}
+
+/* Where a right click sent the champion. Small, solid and in the neutral team
+   colour, so it reads as a marker on the ground rather than as another range. */
+.ground-ring.move-target {
+  fill: rgba(220, 232, 255, 0.22);
+  stroke: rgba(220, 232, 255, 0.75);
+  stroke-width: 2;
+}
+
+@keyframes ring-pulse {
+  0%, 100% { fill-opacity: 0.6; stroke-opacity: 0.7; }
+  50% { fill-opacity: 1; stroke-opacity: 1; }
+}
+
+/* Takes the hotbar's place while every seat is held by somebody else. Calm on
+   purpose: the player is not doing anything wrong and there is nothing to act
+   on, so this states the situation rather than warning about it. */
+.spectating {
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  gap: 3px;
+  padding: 10px 20px;
+  border: 1px solid var(--edge);
+  border-radius: 8px;
+  background: rgba(12, 16, 32, 0.78);
+  font-size: 12px;
+  color: var(--ink-dim);
+  text-align: center;
+}
+
+.spectating b {
+  font-size: 13px;
+  letter-spacing: 0.06em;
+  text-transform: uppercase;
+  color: var(--ink);
+}
+
+.tower-warning {
+  padding: 3px 12px;
+  border: 1px solid rgba(255, 90, 90, 0.75);
+  border-radius: 4px;
+  background: rgba(60, 8, 8, 0.72);
+  font-size: 11px;
+  font-weight: bold;
+  letter-spacing: 0.06em;
+  text-transform: uppercase;
+  color: #ff9a9a;
+  animation: warning-pulse 1.1s ease-in-out infinite;
+}
+
+@keyframes warning-pulse {
+  0%, 100% { opacity: 0.72; }
+  50% { opacity: 1; }
+}
+
+.hp-bar {
+  position: absolute;
+  left: 0;
+  top: 0;
+  pointer-events: none;
+}
+
+.hp-bar-bg {
+  background: rgba(0, 0, 0, 0.6);
+  border: 1px solid rgba(255, 255, 255, 0.25);
+  border-radius: 3px;
+  overflow: hidden;
+}
+
+.hp-bar-sm .hp-bar-bg { width: 34px; height: 5px; }
+.hp-bar-md .hp-bar-bg { width: 54px; height: 6px; }
+.hp-bar-lg .hp-bar-bg { width: 76px; height: 8px; }
+
+.hp-bar-fill {
+  height: 100%;
+  transition: width 0.12s ease-out;
+}
+
+.hp-bar-fill.team-0 { background: linear-gradient(90deg, #3a6fd8, #4ecdc4); }
+.hp-bar-fill.team-1 { background: linear-gradient(90deg, #d83a3a, #ff8a65); }
+
+/* The enemy the cursor is on: the other half of the range ring's lesson. */
+.hp-bar.hovered .hp-bar-bg {
+  border-color: rgba(255, 200, 80, 0.95);
+  box-shadow: 0 0 6px rgba(255, 200, 80, 0.55);
+}
+
+/* A nexus still behind its towers can't be damaged, so it shows a shield
+   instead of health: a bar that never moves under attack reads as a bug. */
+.hp-bar.shielded .hp-bar-bg {
+  border-color: rgba(160, 200, 255, 0.9);
+  box-shadow: 0 0 8px rgba(120, 180, 255, 0.5);
+}
+
+.hp-bar.shielded .hp-bar-fill {
+  background: repeating-linear-gradient(
+    45deg,
+    rgba(150, 195, 255, 0.95) 0 5px,
+    rgba(90, 140, 220, 0.95) 5px 10px
+  );
+}
+
+/* ---------- Minimap ----------------------------------------------------- */
+
+.minimap {
+  position: absolute;
+  right: 14px;
+  bottom: 14px;
+  background: rgba(6, 9, 20, 0.72);
+  border: 1px solid var(--edge);
+  border-radius: 8px;
+}
+
+.minimap-lane {
+  fill: rgba(255, 255, 255, 0.06);
+  stroke: rgba(255, 255, 255, 0.12);
+  stroke-width: 1;
+}
+
+.minimap-blip {
+  stroke: rgba(0, 0, 0, 0.55);
+  stroke-width: 0.75;
+}
+
+.minimap-blip.self {
+  stroke: #fff;
+  stroke-width: 1.6;
+}

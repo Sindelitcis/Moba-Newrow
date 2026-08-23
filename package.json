@@ -1,0 +1,34 @@
+{
+  "name": "moba-3x3",
+  "version": "0.0.1",
+  "type": "module",
+  "scripts": {
+    "start": "newstack start",
+    "build": "npm run build:game-client && newstack build",
+    "build:game-client": "vite build",
+    "dev:game-client": "vite build --watch",
+    "game-server": "bun run game-server.ts",
+    "typecheck": "tsc --noEmit -p tsconfig.json",
+    "rules": "bun run scripts/rules-check.ts",
+    "probe": "bun run scripts/lane-probe.ts",
+    "smoke": "bun run scripts/smoke-client.ts",
+    "capture": "bun run scripts/capture-server.ts"
+  },
+  "dependencies": {
+    "@moureau/newstack": "file:../newstack/packages/newstack/moureau-newstack-0.0.77.tgz",
+    "murow": "file:../murow/packages/murow"
+  },
+  "devDependencies": {
+    "typescript": "^5.9.3",
+    "vite": "^5.0.0",
+    "unplugin-typegpu": "0.10.2"
+  },
+  "overrides": {
+    "tinyest": "0.3.1",
+    "tinyest-for-wgsl": "0.3.2"
+  },
+  "trustedDependencies": [
+    "@swc/core",
+    "esbuild"
+  ]
+}

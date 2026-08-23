@@ -1,0 +1,11 @@
+Model Information:
+* title:	Idle animation Golem
+* source:	https://sketchfab.com/3d-models/idle-animation-golem-d897a9c635304bd986c3e84d85bad268
+* author:	Di Co (https://sketchfab.com/dimitricoquet)
+
+Model License:
+* license type:	CC-BY-4.0 (http://creativecommons.org/licenses/by/4.0/)
+* requirements:	Author must be credited. Commercial use is allowed.
+
+If you use this 3D model in your project be sure to copy paste this credit wherever you share it:
+This work is based on "Idle animation Golem" (https://sketchfab.com/3d-models/idle-animation-golem-d897a9c635304bd986c3e84d85bad268) by Di Co (https://sketchfab.com/dimitricoquet) licensed under CC-BY-4.0 (http://creativecommons.org/licenses/by/4.0/)

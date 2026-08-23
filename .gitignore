@@ -1,0 +1,11 @@
+node_modules/
+dist/
+.env.local
+.DS_Store
+
+# Built by `vite build` (see vite-plugins/, vite.config.ts) — regenerate
+# with `bun run build:game-client` or the full `bun run build`.
+public/game-client.js
+
+# Frames written by scripts/capture-server.ts via public/harness.html.
+captures/

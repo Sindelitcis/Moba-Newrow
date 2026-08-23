@@ -1,0 +1,152 @@
+<!doctype html>
+<html>
+<head>
+  <meta charset="utf-8">
+  <title>moba-3x3 harness</title>
+  <style>
+    html, body { margin: 0; width: 100%; height: 100%; overflow: hidden; background: #0c1020; }
+    #c { display: block; width: 100vw; height: 100vh; }
+  </style>
+</head>
+<body>
+  <!--
+    Headless-ish verification harness: the game client on a bare canvas, with
+    no Newstack HUD, plus hooks that let an automated agent (or you, from the
+    devtools console) drive and inspect it.
+
+    Why it exists: Murow's client GameLoop is requestAnimationFrame-driven,
+    and a browser tab that is not compositing never fires RAF, so in a hidden
+    or background tab the game silently never ticks. That looks exactly like a
+    rendering bug: canvas stuck at its default 300x150, nothing drawn, no
+    errors. This page swaps RAF for a setTimeout-backed shim so the loop runs
+    regardless, which makes the client verifiable without a visible window.
+
+    Hooks available once loaded:
+      __hud        every HUD callback's latest value, plus a status log
+      __logs       captured console output and uncaught errors
+      __handle     the GameHandle (call __handle.dispose() to tear down)
+      __key(c, ms) hold a key down, then release it
+      __rightClick(x, y)  a click-to-move order, in canvas pixels
+      __ordered()  whether an order is currently standing
+      __shot(n)    POST the current canvas frame to the local capture server
+      __crop(...)  same, for a scaled-up region
+
+    __shot/__crop post to the capture server on :3011: `bun run capture`, see
+    scripts/capture-server.ts. Without it they simply fail and the rest of the
+    harness still works.
+  -->
+  <canvas id="c"></canvas>
+
+  <script>
+    (() => {
+      let nextId = 0;
+      const timers = new Map();
+      window.requestAnimationFrame = (cb) => {
+        const id = ++nextId;
+        timers.set(id, setTimeout(() => { timers.delete(id); cb(performance.now()); }, 16));
+        return id;
+      };
+      window.cancelAnimationFrame = (id) => {
+        clearTimeout(timers.get(id));
+        timers.delete(id);
+      };
+    })();
+
+    // Capture everything the page logs: a hidden tab's console is not
+    // readable from outside, and this is where render errors surface.
+    window.__logs = [];
+    for (const level of ['log', 'warn', 'error']) {
+      const original = console[level].bind(console);
+      console[level] = (...args) => {
+        window.__logs.push(level + ': ' + args.map(a => (a && a.stack) || String(a)).join(' '));
+        original(...args);
+      };
+    }
+    window.addEventListener('error', (e) => window.__logs.push('uncaught: ' + e.message));
+    window.addEventListener('unhandledrejection', (e) => window.__logs.push('rejection: ' + e.reason));
+  </script>
+
+  <script>
+    // Cache-busted exactly like Game.tsx does it. Without this the browser
+    // happily serves the previous bundle across rebuilds, and the harness
+    // silently verifies code that is no longer there, which is worse than
+    // not verifying at all.
+    document.write('<script src="/game-client.js?v=' + Date.now() + '"><\/script>');
+  </script>
+
+  <script>
+    // The renderer sizes its backing store from a ResizeObserver, and those
+    // notifications are delivered in the same rendering steps RAF is, so with
+    // the shim above the canvas would stay at its default 300x150. Set it
+    // explicitly before init: the constructor seeds itself from canvas.width/
+    // height and takes the aspect from clientWidth/clientHeight.
+    const canvas = document.getElementById('c');
+    canvas.width = canvas.clientWidth;
+    canvas.height = canvas.clientHeight;
+
+    // ?bots=N keeps both teams topped up to N champions with AI, same as the
+    // menu's size buttons. Absent or 0 is pure PvP.
+    const botsPerTeam = Number(new URLSearchParams(location.search).get('bots')) || 0;
+
+    // Every HUD callback lands in __hud, so a console (or an automated agent)
+    // can assert on exactly what the real HUD would be showing.
+    window.__hud = { statusLog: [], feed: [], botsPerTeam };
+    window.__handle = window.__initMobaGame(canvas, {
+      onStatus: (s) => { window.__hud.status = s; window.__hud.statusLog.push(s); },
+      onPing: (ms) => { window.__hud.ping = ms; },
+      onMuted: (m) => { window.__hud.muted = m; },
+      onClock: (s) => { window.__hud.clock = s; },
+      onScore: (s) => { window.__hud.score = s; },
+      onSelf: (s) => { window.__hud.self = s; },
+      onFeed: (e) => { window.__hud.feed.push(e); },
+      onRespawn: (s) => { window.__hud.respawn = s; },
+      onMatchOver: (r) => { window.__hud.result = r; },
+      onNextMatchIn: (s) => { window.__hud.nextMatch = s; },
+      onAttackCooldown: (f) => { window.__hud.attackCd = f; },
+      onCleaveCooldown: (f) => { window.__hud.cleaveCd = f; },
+      onSpectating: (s) => { window.__hud.spectating = s; },
+    }, { botsPerTeam });
+
+    const post = (name, dataUrl) =>
+      fetch('http://localhost:3011/?name=' + name, { method: 'POST', body: dataUrl }).then((r) => r.text());
+
+    window.__shot = (name) => post(name, canvas.toDataURL('image/png'));
+
+    window.__crop = (name, x, y, w, h, zoom = 1) => {
+      const out = document.createElement('canvas');
+      out.width = w * zoom;
+      out.height = h * zoom;
+      const ctx = out.getContext('2d');
+      ctx.imageSmoothingEnabled = false;
+      ctx.drawImage(canvas, x, y, w, h, 0, 0, w * zoom, h * zoom);
+      return post(name, out.toDataURL('image/png'));
+    };
+
+    // Murow reads input off `document`, so synthetic events drive the game.
+    window.__key = (code, ms = 300) => new Promise((resolve) => {
+      document.dispatchEvent(new KeyboardEvent('keydown', { code, bubbles: true }));
+      setTimeout(() => {
+        document.dispatchEvent(new KeyboardEvent('keyup', { code, bubbles: true }));
+        resolve();
+      }, ms);
+    });
+
+    // A click-to-move order, in canvas pixels. On the canvas rather than on
+    // `document`: unlike the keyboard, the mouse listeners are bound to the
+    // canvas itself, and the client reads the pixel off clientX/clientY.
+    window.__rightClick = (x, y) => {
+      const rect = canvas.getBoundingClientRect();
+      canvas.dispatchEvent(new MouseEvent('mousedown', {
+        button: 2, buttons: 2, clientX: rect.left + x, clientY: rect.top + y, bubbles: true,
+      }));
+    };
+
+    // Whether an order is currently standing, read off the marker drawn on the
+    // ground rather than off any extra hook: that polygon existing is the same
+    // fact the player is being shown.
+    window.__ordered = () => document.querySelectorAll(
+      '.ground-ring.move-target:not([style*="display: none"])',
+    ).length > 0;
+  </script>
+</body>
+</html>

@@ -1,0 +1,28 @@
+{
+  "compilerOptions": {
+    // Matches the Vite build target (see vite.config.ts) and what Bun runs
+    // the server with. Both are modern engines, and the default (ES5) is
+    // what made top-level `await` in scripts/ a type error.
+    "target": "ES2022",
+    "lib": ["ES2022", "DOM", "DOM.Iterable"],
+    "module": "ESNext",
+    "moduleResolution": "bundler",
+    "esModuleInterop": true,
+    "skipLibCheck": true,
+    // Newstack's esbuild pipeline and Vite both do the JSX transform; TS only
+    // type-checks it. The JSX namespace itself comes from
+    // src/@types/newstack-jsx.d.ts, because Newstack ships none.
+    "jsx": "preserve",
+    // On, and it stays on. Every `null` this codebase deals with means
+    // something specific (a dead champion, a spectator with no seat, a point
+    // behind the camera), and those are exactly the cases worth being told
+    // about at compile time.
+    "strict": true,
+    "noUnusedLocals": true,
+    "noUnusedParameters": true,
+    "noFallthroughCasesInSwitch": true,
+    "forceConsistentCasingInFileNames": true,
+    "noEmit": true
+  },
+  "exclude": ["node_modules", "dist", "public"]
+}

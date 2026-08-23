@@ -1,0 +1,11 @@
+Model Information:
+* title:	Aya (Arena Of Valor)
+* source:	https://sketchfab.com/3d-models/aya-arena-of-valor-61178cfea4d0405aa05c99e2fcc92b37
+* author:	topomega3 (https://sketchfab.com/topomega3)
+
+Model License:
+* license type:	CC-BY-4.0 (http://creativecommons.org/licenses/by/4.0/)
+* requirements:	Author must be credited. Commercial use is allowed.
+
+If you use this 3D model in your project be sure to copy paste this credit wherever you share it:
+This work is based on "Aya (Arena Of Valor)" (https://sketchfab.com/3d-models/aya-arena-of-valor-61178cfea4d0405aa05c99e2fcc92b37) by topomega3 (https://sketchfab.com/topomega3) licensed under CC-BY-4.0 (http://creativecommons.org/licenses/by/4.0/)
